@@ -1,0 +1,53 @@
+#!/usr/bin/octave
+# Exemple de solution d'equations differentielles
+
+global odata;
+global par
+odata = load("DOX.txt");
+
+function eps = give_eps( drg, ic, emax, m )
+    if( nargin == 3 )
+        m = 1;
+    end;
+    eps = emax .* drg.^m ./ (drg.^m+ic.^m);
+endfunction
+
+function xdot = log_growth(x,t)
+	global par;
+	l = par(1); K = par(2);
+	V = 1; 
+
+	xdot = zeros(1,1);
+	xdot(V) = l*x(V)*(1-x(V)/K);
+endfunction
+
+function xdot = gomp_growth(x,t)
+	global par;
+	a = par(1); b = par(2); c = par(3);
+	V = 1; 
+
+	xdot = zeros(1,1);
+	xdot(V) = a*x(V)*log(b/(x(V) + c));
+endfunction
+
+# Params
+p = [0.651711 245216 0.006608 1];
+x0 = [1000];
+
+# Now plot the results of the fit
+fd = fopen( "data/MCF7_logl-2.dat", "w" );
+
+# Model solution
+drug_conc = [0,0.00005,0.0005,0.005,0.01,0.015,0.05]
+sample_time = unique( odata(:,1) );
+tvec = [0:0.01:sample_time(end)+2]';
+epse = give_eps( drug_conc, p(3), p(4) );
+for i = 1:length(drug_conc)
+	fprintf( fd, "\n# Drug_conc = %g (p_eps = %g)\n", drug_conc(i), epse(i) );
+	par = [ p(1)*(1-epse(i)), p(2)];
+	y = lsode("log_growth",x0,tvec);
+	fprintf( fd, "%g %g\n", [tvec, y]' );
+end;
+
+fclose(fd);
+

@@ -1,0 +1,98 @@
+#!/usr/bin/octave
+# Exemple de solution d'equations differentielles
+global odata;
+global D;
+global bfpar;
+odata = load("DOX_extra.txt");
+
+function soln = aic( npts, npar, ssr )
+    soln = npts*log(ssr/npts) + 2*(npar+1);
+endfunction
+
+function soln = aicc( npts, npar, ssr )
+    soln = npts*log(ssr/npts) + 2*(npar+1)*npts/(npts-npar-2);
+endfunction
+
+function eps = give_eps( drg, ic, emax, m )
+    if( nargin == 3 )
+        m = 1;
+    end;
+    eps = emax .* drg.^m ./ (drg.^m+ic.^m);
+endfunction
+
+function xdot = log_growth(x,t)
+	global par;
+	l = par(1); K = par(2);
+	V = 1; 
+
+	xdot = zeros(1,1);
+	xdot(V) = l*x(V)*(1-x(V)/K);
+endfunction
+
+# If using leasqr, this is all you need
+function y = leasqrfunc(st,pp)
+	global odata;
+	global bfpar;
+        global par;
+        global D;
+	set = [ 1; find(diff(odata(:,1)) < 0)+1; length(odata)+1 ];
+%	p = 10.^pp
+        p = [10^pp(1), pp(2)/(1+pp(2))]
+	x0 = [ 1000];
+	y = [];
+	for i = 1:length(set)-1
+		sample_time = odata([set(i):set(i+1)-1],1);
+
+		eps = give_eps( D(i), p(1), p(2));
+
+		par = [ 10^bfpar(1) 10^bfpar(2)*(1-eps)]
+		yd = lsode("log_growth",x0,sample_time);
+		y = [ y; yd];
+	end;
+	ssr = sum( (y-odata(:,2)).^2)
+endfunction;
+
+function ssr = wrapper(pp)
+	global odata
+	y=leasqrfunc([],pp);
+	ssr = sum( (y-odata(:,2)).^2)
+endfunction;
+
+function ssr = wrapper1(pp)
+	global odata
+	y=leasqrfunc1([],pp);
+	ssr = sum( (y-odata(1:8,2)).^2)
+endfunction;
+
+function y = leasqrfunc1(st,pp)
+	global odata;
+	global par;
+        global D;
+	p = 10.^pp
+        par = [p(1) p(2)]
+	x0 = [ 1000];
+
+	y = lsode("log_growth",x0,[0:2:14]);
+	ssr = sum( (y-odata(1:8,2)).^2)
+endfunction;
+
+# l K IC emax
+par = [log10(0.3), log10(160000), log10(0.0025), 0.6/(1-0.6)];
+D=[0,0.00005,0.0005,0.005,0.01,0.015,0.05]
+
+
+# Find the best possible fit and write it out
+#ldata = [ odata(:,1), log10(odata(:,3)) ];
+#[bfdata,bfpar] = leasqr(ldata(:,1), ldata(:,2), par, "leasqrfunc");
+par1 = log10([0.3, 400000]);
+[bfpar,ssr] = nelder_mead_min("wrapper1",par1, [1,1e-8,1,1e4,1,0,0]);
+par2 = [log10(0.0025), 0.8/(1-0.8)];
+[bfpar2,ssr2] = nelder_mead_min("wrapper",par2,[1,1e-8,1,1e4,1,0,0]);
+#X = 10.^bfpar';
+X = [10^bfpar(1), 10^bfpar(2), 10^bfpar2(1), bfpar2(2)/(1+bfpar2(2))]; 
+printf("par = [ "); printf("%g ", X); printf("]\n");
+ssr2 #= sum( (bfdata-ldata(:,2)).^2 )
+printf("aic(%d,%d,%g) = %g\n", length(odata),length(par),ssr2,aic(length(odata),length(par),ssr2) );
+printf("aicc(%d,%d,%g) = %g\n", length(odata),length(par),ssr2,aicc(length(odata),length(par),ssr2) );
+
+
